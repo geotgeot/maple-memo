@@ -75,14 +75,13 @@
   <!-- 압축하는 사람 -->
   <section>
     <p class="stitle">메모 압축하기</p>
-    <p class="sdesc">메모 원본을 붙여넣고 버튼을 누르면 압축코드가 나옵니다. 그 코드를 게시판에 올리세요.</p>
     <label for="rawIn">메모 원본</label>
     <textarea id="rawIn" style="height:150px" placeholder="메모 목록을 여기에 붙여넣으세요"></textarea>
     <div class="row">
       <button class="act" onclick="doEncode()">압축하기</button>
       <button class="ghost" onclick="copy('codeOut','encStat')">압축코드 복사</button>
     </div>
-    <label for="codeOut">압축코드 (이걸 복사해서 올리세요)</label>
+    <label for="codeOut">압축코드</label>
     <textarea id="codeOut" style="height:90px" readonly placeholder="여기에 압축코드가 나옵니다"></textarea>
     <div class="stat" id="encStat"></div>
   </section>
@@ -91,25 +90,49 @@
 <script>
 const kb = n => (n/1024).toFixed(1)+'KB';
 
-// ---- 압축 (gzip → base64 텍스트) ----
-async function gzipB64(text){
+// ---- 압축: gzip 바이트 만들기 ----
+async function gzipBytes(text){
   const data = new TextEncoder().encode(text);
   const cs = new CompressionStream('gzip');
-  const buf = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(cs)).arrayBuffer());
+  return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(cs)).arrayBuffer());
+}
+function bytesToB64(buf){
   let bin=''; const chunk=0x8000;
   for(let i=0;i<buf.length;i+=chunk) bin += String.fromCharCode.apply(null, buf.subarray(i,i+chunk));
   return btoa(bin);
 }
+function bytesToDigits(buf){
+  let s=''; for(let i=0;i<buf.length;i++) s += String(buf[i]).padStart(3,'0');
+  return s;
+}
+function digitsToBytes(str){
+  const clean = str.replace(/\D/g,'');
+  const out = new Uint8Array(clean.length/3);
+  for(let i=0,j=0;i<clean.length;i+=3,j++) out[j] = parseInt(clean.substr(i,3),10);
+  return out;
+}
+function bytesToHex(buf){
+  let s=''; for(let i=0;i<buf.length;i++) s += buf[i].toString(16).padStart(2,'0');
+  return s;
+}
+function hexToBytes(str){
+  const clean = str.replace(/[^0-9a-fA-F]/g,'');
+  const out = new Uint8Array(clean.length/2);
+  for(let i=0,j=0;i<clean.length;i+=2,j++) out[j] = parseInt(clean.substr(i,2),16);
+  return out;
+}
+function wrap(s,n){ return s.replace(new RegExp('(.{'+n+'})','g'), '$1\n').trim(); }
+
 async function doEncode(){
   const raw = document.getElementById('rawIn').value;
   const stat = document.getElementById('encStat');
   if(!raw.trim()){ stat.innerHTML='<span class="err">메모 원본이 비어 있습니다.</span>'; return; }
   try{
-    const code = await gzipB64(raw);
+    const buf = await gzipBytes(raw);
+    const code = wrap(bytesToHex(buf),80);
     document.getElementById('codeOut').value = code;
-    const orig = new TextEncoder().encode(raw).length;
-    const ratio = (code.length/orig*100).toFixed(0);
-    stat.innerHTML = `원본 ${kb(orig)} → 압축코드 <b>${kb(code.length)}</b> (약 ${ratio}%) · 위 코드를 복사하세요`;
+    const over = code.length > 50000 ? ' <span class="err">· 5만자 초과!</span>' : '';
+    stat.innerHTML = `<b>${code.length.toLocaleString()}자</b> (${kb(code.length)})${over}`;
   }catch(e){ stat.innerHTML='<span class="err">압축 실패: '+e.message+'</span>'; }
 }
 
@@ -130,6 +153,21 @@ function b64decodeUtf8(b64){
 async function decodeAny(code){
   const t = code.trim();
   if(!t) return null;
+  const clean = t.replace(/\s+/g,'');
+  // 숫자 코드 (바이트당 3자리)
+  if(/^\d+$/.test(clean) && clean.length % 3 === 0){
+    try{
+      const ds = new DecompressionStream('gzip');
+      return await new Response(new Blob([digitsToBytes(clean)]).stream().pipeThrough(ds)).text();
+    }catch(_){}
+  }
+  // HEX 코드 (바이트당 2자리, a~f 포함)
+  if(/^[0-9a-fA-F]+$/.test(clean) && /[a-fA-F]/.test(clean) && clean.length % 2 === 0){
+    try{
+      const ds = new DecompressionStream('gzip');
+      return await new Response(new Blob([hexToBytes(clean)]).stream().pipeThrough(ds)).text();
+    }catch(_){}
+  }
   try { return await ungzipB64(t); } catch(_){}
   try { const x = b64decodeUtf8(t); if(/[\uAC00-\uD7A3a-zA-Z]/.test(x)) return x; } catch(_){}
   if(t.includes('\n') || t.includes('-')) return t;
@@ -167,6 +205,18 @@ function copy(id, statId){
   navigator.clipboard.writeText(el.value);
   if(statId) document.getElementById(statId).innerHTML = '복사됨';
 }
+
+// ---- 같은 폴더에 data.txt가 있으면 페이지 열릴 때 자동으로 불러와 표시 ----
+window.addEventListener('DOMContentLoaded', async () => {
+  try{
+    const res = await fetch('./data.txt', { cache: 'no-store' });
+    if(!res.ok) return;
+    const code = (await res.text()).trim();
+    if(!code) return;
+    codeIn.value = code;
+    codeIn.dispatchEvent(new Event('input'));
+  }catch(_){ /* data.txt 없으면 그냥 수동 붙여넣기로 사용 */ }
+});
 </script>
 </body>
 </html>
