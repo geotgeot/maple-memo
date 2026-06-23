@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>메모 압축 / 보기</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --line:#2a2f3a;
+    --ink:#e6e9ef; --dim:#8b93a3; --accent:#5ad17a;
+    --chip:#1b2330; --warn:#e0644b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"D2Coding",monospace;
+    line-height:1.5; padding:18px;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:17px;margin:0 0 2px;letter-spacing:.5px}
+  h1 .dot{color:var(--accent)}
+  .sub{color:var(--dim);font-size:12px;margin:0 0 18px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+  .stitle{font-size:14px;margin:0 0 4px;font-weight:700}
+  .sdesc{color:var(--dim);font-size:12px;margin:0 0 12px}
+  label{display:block;font-size:12px;color:var(--dim);margin:0 0 6px}
+  textarea{
+    width:100%;resize:vertical;background:#0c0e12;color:var(--ink);
+    border:1px solid var(--line);border-radius:8px;padding:11px;font:inherit;font-size:12px;
+  }
+  textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+  button.act{background:var(--accent);color:#06210f;border:none;border-radius:8px;padding:10px 16px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 16px;font:inherit;font-size:13px;cursor:pointer}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .stat{font-size:12px;color:var(--dim);min-height:16px}
+  .stat b{color:var(--accent)}
+  .err{color:var(--warn)}
+  .bar{display:flex;gap:8px;align-items:center;margin:12px 0 10px;flex-wrap:wrap}
+  #search{flex:1;min-width:160px;background:#0c0e12;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit;font-size:13px}
+  #search:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .count{font-size:12px;color:var(--dim);white-space:nowrap}
+  .count b{color:var(--accent)}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#0c0e12;margin-bottom:6px;font-size:13px}
+  .id{color:var(--ink);font-weight:700;word-break:break-all}
+  .memo{color:var(--dim)}
+  .chip{background:var(--chip);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:1px 9px;font-size:11px}
+  .pow{color:var(--accent);font-size:12px}
+  .pow.warn{color:var(--warn)}
+  .empty{color:var(--dim);font-size:13px;padding:18px 4px;text-align:center}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>메모 압축 / 보기<span class="dot"> ▍</span></h1>
+  <p class="sub">볼 사람은 위, 압축할 사람은 아래만 쓰면 됩니다 · 브라우저 안에서만 동작(서버 전송 없음)</p>
+
+  <!-- 보는 사람 -->
+  <section>
+    <p class="stitle">압축코드 보기</p>
+    <p class="sdesc">받은 압축코드를 붙여넣으면 원래 메모가 한 줄에 한 명씩 그대로 나옵니다. 복사해서 쓰세요.</p>
+    <label for="codeIn">압축코드 붙여넣기</label>
+    <textarea id="codeIn" style="height:70px" placeholder="받은 압축코드를 여기에 붙여넣으세요"></textarea>
+    <div class="row">
+      <button class="ghost" onclick="copy('rawOut','decStat')">메모 전체 복사</button>
+      <span class="count" id="count"></span>
+    </div>
+    <label for="rawOut">메모 (원본 그대로)</label>
+    <textarea id="rawOut" style="height:280px" readonly placeholder="코드를 붙여넣으면 여기에 메모가 나옵니다"></textarea>
+    <div class="stat" id="decStat"></div>
+  </section>
+
+  <!-- 압축하는 사람 -->
+  <section>
+    <p class="stitle">메모 압축하기</p>
+    <p class="sdesc">메모 원본을 붙여넣고 버튼을 누르면 압축코드가 나옵니다. 그 코드를 게시판에 올리세요.</p>
+    <label for="rawIn">메모 원본</label>
+    <textarea id="rawIn" style="height:150px" placeholder="메모 목록을 여기에 붙여넣으세요"></textarea>
+    <div class="row">
+      <button class="act" onclick="doEncode()">압축하기</button>
+      <button class="ghost" onclick="copy('codeOut','encStat')">압축코드 복사</button>
+    </div>
+    <label for="codeOut">압축코드 (이걸 복사해서 올리세요)</label>
+    <textarea id="codeOut" style="height:90px" readonly placeholder="여기에 압축코드가 나옵니다"></textarea>
+    <div class="stat" id="encStat"></div>
+  </section>
+</div>
+
+<script>
+const kb = n => (n/1024).toFixed(1)+'KB';
+
+// ---- 압축 (gzip → base64 텍스트) ----
+async function gzipB64(text){
+  const data = new TextEncoder().encode(text);
+  const cs = new CompressionStream('gzip');
+  const buf = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(cs)).arrayBuffer());
+  let bin=''; const chunk=0x8000;
+  for(let i=0;i<buf.length;i+=chunk) bin += String.fromCharCode.apply(null, buf.subarray(i,i+chunk));
+  return btoa(bin);
+}
+async function doEncode(){
+  const raw = document.getElementById('rawIn').value;
+  const stat = document.getElementById('encStat');
+  if(!raw.trim()){ stat.innerHTML='<span class="err">메모 원본이 비어 있습니다.</span>'; return; }
+  try{
+    const code = await gzipB64(raw);
+    document.getElementById('codeOut').value = code;
+    const orig = new TextEncoder().encode(raw).length;
+    const ratio = (code.length/orig*100).toFixed(0);
+    stat.innerHTML = `원본 ${kb(orig)} → 압축코드 <b>${kb(code.length)}</b> (약 ${ratio}%) · 위 코드를 복사하세요`;
+  }catch(e){ stat.innerHTML='<span class="err">압축 실패: '+e.message+'</span>'; }
+}
+
+// ---- 해독 (압축 자동 인식 → 순수 base64 → 원본 텍스트) ----
+async function ungzipB64(b64){
+  const bin = atob(b64.replace(/\s+/g,''));
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const ds = new DecompressionStream('gzip');
+  return await new Response(new Blob([bytes]).stream().pipeThrough(ds)).text();
+}
+function b64decodeUtf8(b64){
+  const bin = atob(b64.replace(/\s+/g,''));
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+async function decodeAny(code){
+  const t = code.trim();
+  if(!t) return null;
+  try { return await ungzipB64(t); } catch(_){}
+  try { const x = b64decodeUtf8(t); if(/[\uAC00-\uD7A3a-zA-Z]/.test(x)) return x; } catch(_){}
+  if(t.includes('\n') || t.includes('-')) return t;
+  return null;
+}
+
+// ---- 코드 붙여넣으면 원본 텍스트를 그대로 출력 ----
+const codeIn = document.getElementById('codeIn');
+const rawOut = document.getElementById('rawOut');
+const decStat = document.getElementById('decStat');
+const countEl = document.getElementById('count');
+
+let timer;
+codeIn.addEventListener('input', () => {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    decStat.innerHTML=''; countEl.textContent='';
+    const code = codeIn.value;
+    if(!code.trim()){ rawOut.value=''; return; }
+    const text = await decodeAny(code);
+    if(text === null){
+      rawOut.value='';
+      decStat.innerHTML='<span class="err">코드를 읽지 못했습니다. 전체를 정확히 복사했는지 확인하세요.</span>';
+      return;
+    }
+    rawOut.value = text;
+    const lines = text.split(/\r?\n/).filter(l => l.trim()).length;
+    countEl.textContent = `총 ${lines}명`;
+  }, 120);
+});
+
+function copy(id, statId){
+  const el = document.getElementById(id);
+  if(!el.value) return;
+  navigator.clipboard.writeText(el.value);
+  if(statId) document.getElementById(statId).innerHTML = '복사됨';
+}
+</script>
+</body>
+</html>
