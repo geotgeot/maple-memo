@@ -129,7 +129,7 @@ async function doEncode(){
   if(!raw.trim()){ stat.innerHTML='<span class="err">메모 원본이 비어 있습니다.</span>'; return; }
   try{
     const buf = await gzipBytes(raw);
-    const code = MARK_START + '\n' + wrap(bytesToHex(buf),80) + '\n' + MARK_END;
+    const code = HEADER + MARK_START + '\n' + wrap(bytesToHex(buf),80) + '\n' + MARK_END;
     document.getElementById('codeOut').value = code;
     const over = code.length > 50000 ? ' <span class="err">· 5만자 초과!</span>' : '';
     stat.innerHTML = `<b>${code.length.toLocaleString()}자</b> (${kb(code.length)})${over}`;
@@ -179,6 +179,13 @@ const MARK_START = '===== 메모코드 시작 =====';
 const MARK_END   = '===== 메모코드 끝 =====';
 const CORE_START = '메모코드 시작';
 const CORE_END   = '메모코드 끝';
+
+// 코드 위에 자동으로 붙는 안내문 (마커 바깥이라 해독 시 무시됨)
+const VIEWER_URL = 'https://geotgeot.github.io/maple-memo/';
+const HEADER =
+  '[메모 보는 법]\n' +
+  '1. 이 글 전체를 복사 (다른 글자 섞여도 상관없음)\n' +
+  '2. ' + VIEWER_URL + ' 접속 후 붙여넣기\n\n';
 
 // 마커가 있으면 그 사이의 HEX만 뽑아 풀고, 없으면 기존 자동 인식
 async function decodeInput(code){
