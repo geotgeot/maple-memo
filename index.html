@@ -129,7 +129,7 @@ async function doEncode(){
   if(!raw.trim()){ stat.innerHTML='<span class="err">메모 원본이 비어 있습니다.</span>'; return; }
   try{
     const buf = await gzipBytes(raw);
-    const code = wrap(bytesToHex(buf),80);
+    const code = MARK_START + '\n' + wrap(bytesToHex(buf),80) + '\n' + MARK_END;
     document.getElementById('codeOut').value = code;
     const over = code.length > 50000 ? ' <span class="err">· 5만자 초과!</span>' : '';
     stat.innerHTML = `<b>${code.length.toLocaleString()}자</b> (${kb(code.length)})${over}`;
@@ -174,6 +174,29 @@ async function decodeAny(code){
   return null;
 }
 
+// ---- 코드 앞뒤 마커 (전체선택해서 붙여넣어도 이 사이만 읽음) ----
+const MARK_START = '===== 메모코드 시작 =====';
+const MARK_END   = '===== 메모코드 끝 =====';
+const CORE_START = '메모코드 시작';
+const CORE_END   = '메모코드 끝';
+
+// 마커가 있으면 그 사이의 HEX만 뽑아 풀고, 없으면 기존 자동 인식
+async function decodeInput(code){
+  const a = code.indexOf(CORE_START);
+  const b = code.indexOf(CORE_END);
+  if(a !== -1 && b !== -1 && b > a){
+    const hex = code.slice(a, b).replace(/[^0-9a-fA-F]/g,'');
+    if(hex.length >= 2 && hex.length % 2 === 0){
+      try{
+        const ds = new DecompressionStream('gzip');
+        return await new Response(new Blob([hexToBytes(hex)]).stream().pipeThrough(ds)).text();
+      }catch(_){}
+    }
+    return null;
+  }
+  return await decodeAny(code);
+}
+
 // ---- 코드 붙여넣으면 원본 텍스트를 그대로 출력 ----
 const codeIn = document.getElementById('codeIn');
 const rawOut = document.getElementById('rawOut');
@@ -187,7 +210,7 @@ codeIn.addEventListener('input', () => {
     decStat.innerHTML=''; countEl.textContent='';
     const code = codeIn.value;
     if(!code.trim()){ rawOut.value=''; return; }
-    const text = await decodeAny(code);
+    const text = await decodeInput(code);
     if(text === null){
       rawOut.value='';
       decStat.innerHTML='<span class="err">코드를 읽지 못했습니다. 전체를 정확히 복사했는지 확인하세요.</span>';
